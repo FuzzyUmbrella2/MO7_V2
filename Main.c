@@ -1,0 +1,90 @@
+#include "defines.h"
+#include "filters.h"
+
+
+u32 status_reg = 0;		// Buffer to store status register of I2S
+u8 is_data_ready = 0;	// unsigned 8 bit integer used as a boolean to indicate if new audio sample is available from I2S
+						// 1: new sample available
+						// 0: new sample not (yet) available
+
+double terms[ORDER+1] = {
+		-0.022230559520827732067349558064961456694,
+		-0.023905005972930076785232245129009243101,
+		-0.025540429146351198430586748600035207346,
+		-0.027122653434699717234224181083845905960,
+		-0.028637778983484598466224824164783058222,
+		-0.030072337607443450774313831175277300645,
+		-0.031413444911505848666788409673245041631,
+		-0.032648946690999082476114523387877852656,
+		-0.033767557751859758607970718458091141656,
+		-0.034758991381966045097762219029391417280,
+		-0.035614077819079388576017919376681675203,
+		-0.036324870197779156322237525955642922781,
+		-0.036884736615355614985922727555589517578,
+		-0.037288437132775478777269029251328902319,
+		-0.037532184719168089348517725056808558293,
+		 0.962386310645824583076546332449652254581,
+		-0.037532184719168089348517725056808558293,
+		-0.037288437132775478777269029251328902319,
+		-0.036884736615355614985922727555589517578,
+		-0.036324870197779156322237525955642922781,
+		-0.035614077819079388576017919376681675203,
+		-0.034758991381966045097762219029391417280,
+		-0.033767557751859758607970718458091141656,
+		-0.032648946690999082476114523387877852656,
+		-0.031413444911505848666788409673245041631,
+		-0.030072337607443450774313831175277300645,
+		-0.028637778983484598466224824164783058222,
+		-0.027122653434699717234224181083845905960,
+		-0.025540429146351198430586748600035207346,
+		-0.023905005972930076785232245129009243101,
+		-0.022230559520827732067349558064961456694
+};
+
+void converter();
+
+int main()
+{
+    init_platform();
+
+	IicConfig(XPAR_XIICPS_1_DEVICE_ID);
+
+	//Configure the Audio Codec's PLL
+	AudioPllConfig();
+
+	//Configure the Line in and Line out ports.
+	//Call LineInLineOutConfig() for a configuration that
+	//enables the HP jack too.
+	//AudioConfigureJacks();
+	LineinLineoutConfig();
+
+	xil_printf("ADAU1761 configured\n\r");
+
+    setupFilters();
+
+    //converter();
+
+    while(1)
+    {
+    	/*
+    	 * Wait for a new audio sample to be available (48KHz)
+    	 */
+    	while (is_data_ready == 0) {
+    		// A new audio sample is available when bit21 of I2S_STATUS_REG becomes 1
+    		// (see https://byu-cpe.github.io/ecen427/documentation/audio-hw/)
+    		status_reg = Xil_In32(I2S_STATUS_REG);
+    		// Read bit21 of register I2S_STATUS_REG
+    		is_data_ready = (status_reg >> 21 ) & 1;
+    	}
+    	is_data_ready = 0;
+    	// Clear bit21 of I2S_STATUS_REG, i.e. set bit21 to 0
+    	status_reg = status_reg & (u32)(~(1<<21));
+    	Xil_Out32(I2S_STATUS_REG, status_reg);
+
+    	updateInput();
+   		//regular();
+    	FIR(terms);
+    	outputData();
+    }
+    return 0;
+}
