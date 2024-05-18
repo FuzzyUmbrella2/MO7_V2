@@ -6,10 +6,6 @@ buffer* output;
 
 #define TEST 40000
 
-s32 data[TEST];
-u32 dataIndex;
-int done;
-
 void setupFilters()
 {
 	input = malloc(sizeof(buffer));
@@ -19,23 +15,49 @@ void setupFilters()
 		return;
 	}
 
-	output = malloc(AMOUNT*sizeof(buffer));
+	input->index = 0;
+	input->size = ORDER+1;
+	input->dBgain = 0;
+	input->gain = 0;
+
+	for(int i = 0; i<=ORDER; i++)
+	{
+		input->bufferR[i] = 0.0f;
+		input->bufferL[i] = 0.0f;
+	}
+
+
+
+	output = malloc(/*AMOUNT**/sizeof(buffer));
 	if (output==NULL)
 	{
 		printf("Error\n");
 		return;
 	}
 
-	input->index = 0;
 	output->index = 0;
+	output->size = ORDER+1;
+	output->dBgain = 0;
+	output->gain = 0;
 
-	for(int i = 0; i<ORDER; i++)
+	for(int i = 0; i<=ORDER; i++)
 	{
-		input->bufferR[i] = 0.0f;
-		input->bufferL[i] = 0.0f;
 		output->bufferR[i] = 0.0f;
 		output->bufferL[i] = 0.0f;
 	}
+
+/*	for(int nmr = 0; nmr<AMOUNT; nmr++)
+	{
+		(output+nmr)->index = 0;
+		(output+nmr)->size = ORDER+1;
+		(output+nmr)->dBgain = 0;
+		(output+nmr)->gain = 0;
+		for(int i = 0; i<=ORDER; i++)
+		{
+			(output+nmr)->bufferR[i] = 0.0f;
+			(output+nmr)->bufferL[i] = 0.0f;
+		}
+	}*/
 
 	printf("succesfull init\n");
 }
@@ -57,37 +79,26 @@ void updateInput()
 		input->index++;
 	}
 
-	input->bufferR[index] = (double)in_right;
-	input->bufferL[index] = (double)in_left;
+	input->bufferR[index] = (float)in_right;
+	input->bufferL[index] = (float)in_left;
 }
 
-void updateOutput(double valueR, double valueL)
+void updateOutput(float valueR, float valueL)
 {
-	int indexOut = output->index;
+	output->index = (output->index + 1) % output->size;
 
-	if(indexOut+1>ORDER)
-	{
-		indexOut = 0;
-		output->index=0;
-	}
-	else
-	{
-		indexOut++;
-		output->index++;
-	}
-
-	output->bufferR[indexOut] = valueR;
-	output->bufferL[indexOut] = valueL;
+	output->bufferR[output->index] = valueR;
+	output->bufferL[output->index] = valueL;
 }
 
 void outputData()
 {
 	int index = output->index;
 
-	if(output->bufferR[index]>(2^32))
+/*	if(output->bufferR[index] > INT32_MAX)
 	{
 		printf("Clipping\n");
-	}
+	}*/
 
 	s32 out_right = (s32)(output->bufferR[index]);
 	s32 out_left = (s32)(output->bufferL[index]);
@@ -102,69 +113,93 @@ void regular()
 	updateOutput(input->bufferR[index], input->bufferL[index]);
 }
 
-void FIR(double* terms)
+void FIR(float* terms)
 {
 	int index = input->index;
-	double sumR = 0;
-	double sumL = 0;
-	double newR, newL;
-	for(int i=0; i<ORDER; i++)
+	float sumR = 0;
+	float sumL = 0;
+	for(int i=0; i<=ORDER; i++)
 	{
-		if((index+i)<ORDER)
-		{
-			newR = input->bufferR[index+i]*terms[i];
-			newL = input->bufferL[index+i]*terms[i];
-		}
-		else
-		{
-			newR = input->bufferR[index+i-ORDER]*terms[i];
-			newL = input->bufferL[index+i-ORDER]*terms[i];
-		}
-		sumR = sumR+newR;
-		sumL = sumL+newL;
+			int idx = (index - i + input->size) % input->size; // Correct circular buffer indexing
+			sumR += input->bufferR[idx] * terms[i];
+			sumL += input->bufferL[idx] * terms[i];
 	}
 
 	updateOutput(sumR, sumL);
 }
 
-void IIR(float* termsA, float* termsB)
+void IIR(float* num, float* den)
 {
 	int indexIn = input->index;
 	int indexOut = output->index;
-	float sumR, sumL, newR, newL;
+	float sumR = 0, sumL = 0;
 
-	sumR = input->bufferR[indexIn]*termsA[0];
-	sumL = input->bufferL[indexIn]*termsA[0];
 
-	for(int i=1; i<ORDER; i++)
+	for(int i=0; i<=ORDER; i++)
 	{
-		if((indexIn-i)>=0)
-		{
-			newR = input->bufferR[indexIn-i]*termsA[i];
-			newL = input->bufferL[indexIn-i]*termsA[i];
-		}
-		else
-		{
-			newR = input->bufferR[ORDER-i]*termsA[i];
-			newL = input->bufferL[ORDER-i]*termsA[i];
-		}
+		int idx = (indexIn - i + input->size) % input->size; // Correct circular buffer indexing
+		sumR += input->bufferR[idx] * num[i];
+		sumL += input->bufferL[idx] * num[i];
+	}
 
-		sumR = sumR+newR;
-		sumL = sumL+newL;
+	for(int i = 0; i<ORDER; i++)
+	{
+		int idx = (indexOut - i + output->size) % output->size; // Correct circular buffer indexing
+		sumR -= output->bufferR[idx] * den[i+1];
+		sumL -= output->bufferL[idx] * den[i+1];
+	}
+
+	updateOutput(sumR, sumL);
+}
+
+float* gain(int dBgain, int nmr)
+{
+	int index = (output+nmr)->index;
+	float gain = 0;
+	float outGain[2];
+	float* ptr = outGain;
+
+	if(dBgain!=(output+nmr)->dBgain)
+	{
+		gain = 10^(dBgain/20);
+		(output+nmr)->dBgain = dBgain;
+		(output+nmr)->gain = gain;
+	}
+
+	outGain[0]= ((output+nmr)->bufferR[index])*gain;
+	outGain[1] = ((output+nmr)->bufferL[index])*gain;
+
+	return ptr;
+}
 
 
-		if ((indexOut-i)>=0)
-		{
-			newR = output->bufferR[indexOut-i]*termsB[i-1];
-			newL = output->bufferL[indexOut-i]*termsB[i-1];
+XTime tStart = 0, tEnd = 0;
+XTime summedTime = 0;
+u32 iteration = 0;
+const u32 maxIterations = samples+2;
+float finalAnswer;
+
+
+void timerStart() {
+	if (iteration < samples) {
+		XTime_GetTime(&tStart);
+	}
+}
+
+void timerEnd() {
+	if (iteration < maxIterations) {
+		if (iteration < samples) {//taking another sample
+				XTime_GetTime(&tEnd);
+				summedTime = summedTime + (u32)(tEnd - tStart); //summing function
+				//printf("read: %d\n", ((int)(tEnd - tStart) / CPuS));
 		}
-		else
-		{
-			newR = output->bufferR[ORDER-i]*termsB[i-1];
-			newL = output->bufferL[ORDER-i]*termsB[i-1];
-		}
+		else if (iteration == samples) { //calculating
+			finalAnswer = (float)summedTime / (float)samples / (float)CPuS;
 
-		sumR = sumR-newR;
-		sumL = sumL-newL;
+		}
+		else { //printing (not done at the same time as calculating due to performance)
+			printf("process takes %f us\n",finalAnswer);
+		}
+		iteration++;
 	}
 }
