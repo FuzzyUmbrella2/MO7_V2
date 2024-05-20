@@ -1,7 +1,7 @@
 #include "filters.h"
 
 buffer* input;
-buffer* output;
+buffer* filterOutput;
 
 
 #define TEST 40000
@@ -17,8 +17,9 @@ void setupFilters()
 
 	input->index = 0;
 	input->size = ORDER+1;
-	input->dBgain = 0;
 	input->gain = 0;
+	input->gainOutputRight = 0;
+	input->gainOutputLeft = 0;
 
 	for(int i = 0; i<=ORDER; i++)
 	{
@@ -28,36 +29,26 @@ void setupFilters()
 
 
 
-	output = malloc(/*AMOUNT**/sizeof(buffer));
-	if (output==NULL)
+	filterOutput = malloc(AMOUNT*sizeof(buffer));
+	if (filterOutput==NULL)
 	{
 		printf("Error\n");
 		return;
 	}
 
-	output->index = 0;
-	output->size = ORDER+1;
-	output->dBgain = 0;
-	output->gain = 0;
-
-	for(int i = 0; i<=ORDER; i++)
+	for(int nmr = 0; nmr<AMOUNT; nmr++)
 	{
-		output->bufferR[i] = 0.0f;
-		output->bufferL[i] = 0.0f;
-	}
-
-/*	for(int nmr = 0; nmr<AMOUNT; nmr++)
-	{
-		(output+nmr)->index = 0;
-		(output+nmr)->size = ORDER+1;
-		(output+nmr)->dBgain = 0;
-		(output+nmr)->gain = 0;
+		(filterOutput+nmr)->index = 0;
+		(filterOutput+nmr)->size = ORDER+1;
+		(filterOutput+nmr)->gain = 1;
+		(filterOutput+nmr)->gainOutputRight = 0;
+		(filterOutput+nmr)->gainOutputLeft = 0;
 		for(int i = 0; i<=ORDER; i++)
 		{
-			(output+nmr)->bufferR[i] = 0.0f;
-			(output+nmr)->bufferL[i] = 0.0f;
+			(filterOutput+nmr)->bufferR[i] = 0.0f;
+			(filterOutput+nmr)->bufferL[i] = 0.0f;
 		}
-	}*/
+	}
 
 	printf("succesfull init\n");
 }
@@ -83,37 +74,21 @@ void updateInput()
 	input->bufferL[index] = (float)in_left;
 }
 
-void updateOutput(float valueR, float valueL)
+void updateOutput(float valueR, float valueL, int nmr)
 {
-	output->index = (output->index + 1) % output->size;
-
-	output->bufferR[output->index] = valueR;
-	output->bufferL[output->index] = valueL;
+	buffer* outputPtr = filterOutput+nmr;
+	outputPtr->index = (outputPtr->index + 1) % outputPtr->size;
+	outputPtr->bufferR[outputPtr->index] = valueR;
+	outputPtr->bufferL[outputPtr->index] = valueL;
 }
 
-void outputData()
+void outputData(float out_right, float out_left)
 {
-	int index = output->index;
-
-/*	if(output->bufferR[index] > INT32_MAX)
-	{
-		printf("Clipping\n");
-	}*/
-
-	s32 out_right = (s32)(output->bufferR[index]);
-	s32 out_left = (s32)(output->bufferL[index]);
-
-	Xil_Out32(I2S_DATA_TX_R_REG, out_right>>8);
-	Xil_Out32(I2S_DATA_TX_L_REG, out_left>>8);
+	Xil_Out32(I2S_DATA_TX_R_REG, ((s32)out_right)>>8);
+	Xil_Out32(I2S_DATA_TX_L_REG, ((s32)out_left)>>8);
 }
 
-void regular()
-{
-	int index = input->index;
-	updateOutput(input->bufferR[index], input->bufferL[index]);
-}
-
-void FIR(float* terms)
+void FIR(float* terms, int nmr)
 {
 	int index = input->index;
 	float sumR = 0;
@@ -125,13 +100,13 @@ void FIR(float* terms)
 			sumL += input->bufferL[idx] * terms[i];
 	}
 
-	updateOutput(sumR, sumL);
+	updateOutput(sumR, sumL, nmr);
 }
 
-void IIR(float* num, float* den)
+void IIR(float* num, float* den, int nmr)
 {
 	int indexIn = input->index;
-	int indexOut = output->index;
+	int indexOut = filterOutput->index;
 	float sumR = 0, sumL = 0;
 
 
@@ -144,62 +119,26 @@ void IIR(float* num, float* den)
 
 	for(int i = 0; i<ORDER; i++)
 	{
-		int idx = (indexOut - i + output->size) % output->size; // Correct circular buffer indexing
-		sumR -= output->bufferR[idx] * den[i+1];
-		sumL -= output->bufferL[idx] * den[i+1];
+		int idx = (indexOut - i + filterOutput->size) % filterOutput->size; // Correct circular buffer indexing
+		sumR -= filterOutput->bufferR[idx] * den[i+1];
+		sumL -= filterOutput->bufferL[idx] * den[i+1];
 	}
 
-	updateOutput(sumR, sumL);
+	updateOutput(sumR, sumL, nmr);
 }
 
-float* gain(int dBgain, int nmr)
+void dBToFloat (int dB, int nmr)
 {
-	int index = (output+nmr)->index;
-	float gain = 0;
-	float outGain[2];
-	float* ptr = outGain;
-
-	if(dBgain!=(output+nmr)->dBgain)
-	{
-		gain = 10^(dBgain/20);
-		(output+nmr)->dBgain = dBgain;
-		(output+nmr)->gain = gain;
-	}
-
-	outGain[0]= ((output+nmr)->bufferR[index])*gain;
-	outGain[1] = ((output+nmr)->bufferL[index])*gain;
-
-	return ptr;
+	float gain = 10^(dB/20);
+	(filterOutput+nmr)->gain = gain;
 }
 
+void gain(int nmr)
+{
+	buffer* outputPtr = filterOutput+nmr;
+	int index = outputPtr->index;
+	float gain = outputPtr->gain;
 
-XTime tStart = 0, tEnd = 0;
-XTime summedTime = 0;
-u32 iteration = 0;
-const u32 maxIterations = samples+2;
-float finalAnswer;
-
-
-void timerStart() {
-	if (iteration < samples) {
-		XTime_GetTime(&tStart);
-	}
-}
-
-void timerEnd() {
-	if (iteration < maxIterations) {
-		if (iteration < samples) {//taking another sample
-				XTime_GetTime(&tEnd);
-				summedTime = summedTime + (u32)(tEnd - tStart); //summing function
-				//printf("read: %d\n", ((int)(tEnd - tStart) / CPuS));
-		}
-		else if (iteration == samples) { //calculating
-			finalAnswer = (float)summedTime / (float)samples / (float)CPuS;
-
-		}
-		else { //printing (not done at the same time as calculating due to performance)
-			printf("process takes %f us\n",finalAnswer);
-		}
-		iteration++;
-	}
+	outputPtr->gainOutputRight = outputPtr->bufferR[index]*gain;
+	outputPtr->gainOutputLeft = outputPtr->bufferL[index]*gain;
 }

@@ -9,33 +9,24 @@ typedef struct buffer
 	int size;
 	float bufferR[ORDER+1];
 	float bufferL[ORDER+1];
-	int dBgain;
 	float gain;
+	float gainOutputRight;
+	float gainOutputLeft;
 } buffer;
 
 void setupFilters();
 void updateInput();
-void outputData();
-void regular();
+void outputData(float out_right, float out_left);
 
-void FIR(float* terms);
-void IIR(float* numerator, float* denumerator);
-float* gain(int dB_gain, int bandNmr);
+void FIR(float* terms, int nmr);
+void IIR(float* numerator, float* denumerator, int nmr);
+void dBToFloat(int dB, int nmr);
+void gain(int bandNmr);
 
 
 //====== INSTRUCTIONS ======
 //Put timerStart() after a new audio signal has been detected
 //Put timerEnd() after your function has completed all processes
-
-#define samples 100 //change this number to change the amount of times the timer will run
-
-#include <stdio.h>
-#include "platform.h"
-#include "xparameters.h"
-#include "xtime_l.h"
-
-// #define CPS 0x135F1B40
-#define CPuS 325
 
 void timerStart();
 void timerEnd();
