@@ -10,7 +10,10 @@ int main()
 {
     init_platform();
 
-	IicConfig(XPAR_XIICPS_1_DEVICE_ID);
+    printf("initializing software\n");
+
+	int status = IicConfig(XPAR_XIICPS_1_DEVICE_ID);
+	if (status != XST_SUCCESS) { printf("IIC failed\n");}
 
 	//Configure the Audio Codec's PLL
 	AudioPllConfig();
@@ -22,8 +25,8 @@ int main()
 
     setupFilters();
 
-    dBToFloat(60, 0);
-    dBToFloat(-60, 1);
+    //dBToFloat(60, 0);
+    //dBToFloat(120, 1);
 
     loop();
 
@@ -53,8 +56,8 @@ void loop()
 
 		timerStart();
 		updateInput();
-		IIR(num1, den1, 0);
-		IIR(num2, den2, 1);
+		IIR(num22, den22, 0);
+		IIR(num1, den1, 1);
 		adder();
 		timerEnd();
 	}
