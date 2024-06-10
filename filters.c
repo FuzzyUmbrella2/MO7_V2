@@ -61,6 +61,26 @@ void setupFilters()
 		}
 	}
 
+	bandpassAdd = malloc(2*sizeof(buffer));
+	if (bandpassAdd==NULL)
+	{
+		printf("Error\n");
+		return;
+	}
+
+	for(u8 nmr = 0; nmr<2; nmr++)
+	{
+		(bandpassAdd+nmr)->index = 0;
+		(bandpassAdd+nmr)->gain = 1;
+		(bandpassAdd+nmr)->gainOutputRight = 0;
+		(bandpassAdd+nmr)->gainOutputLeft = 0;
+		for(u8 i = 0; i<=ORDER; i++)
+		{
+			(bandpassAdd+nmr)->bufferR[i] = 0.0f;
+			(bandpassAdd+nmr)->bufferL[i] = 0.0f;
+		}
+	}
+
 	printf("succesfull init\n");
 }
 
