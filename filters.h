@@ -6,8 +6,9 @@
 void setupFilters();
 void updateInput();
 
-void FIR(float* terms, u8 bandNmr);
-void IIR(float* numerator, float* denumerator, u8 bandNmr);
+void FIR(double* terms, u8 bandNmr);
+void IIR(double* numerator, double* denumerator, u8 bandNmr);
+void IIR2(double* num, double* den, double* num2, double* den2, u8 nmr);
 void dBToFloat(s16 dB, u8 bandNmr);
 void adder();
 

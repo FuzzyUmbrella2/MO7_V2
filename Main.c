@@ -25,8 +25,9 @@ int main()
 
     setupFilters();
 
-    //dBToFloat(60, 0);
-    //dBToFloat(120, 1);
+    dBToFloat(00, 0);
+    dBToFloat(-240, 1);
+    dBToFloat(-240, 2);
 
     loop();
 
@@ -56,8 +57,9 @@ void loop()
 
 		timerStart();
 		updateInput();
-		IIR(num22, den22, 0);
-		IIR(num1, den1, 1);
+		IIR(numDerek, denDerek, 0);
+		IIR2(numJordi1, denJordi1, numJordi2, denJordi2, 1);
+		IIR(numMees, denMees, 2);
 		adder();
 		timerEnd();
 	}

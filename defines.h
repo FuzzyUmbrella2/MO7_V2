@@ -12,4 +12,4 @@
 #define UART_BASEADDR XPAR_PS7_UART_0_BASEADDR
 
 #define ORDER 8
-#define AMOUNT 2
+#define AMOUNT 3
