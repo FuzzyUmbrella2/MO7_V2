@@ -3,6 +3,13 @@
 
 #include "defines.h"
 
+#include "xparameters.h"
+#include "platform.h"
+#include "xil_io.h"
+#include "stdlib.h"
+#include <stdio.h>
+#include "audio.h"
+
 void setupFilters();
 void updateInput();
 

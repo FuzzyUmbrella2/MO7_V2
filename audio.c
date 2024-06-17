@@ -1,5 +1,4 @@
-/*
- * audio.c
+/* audio.c
  *
  *  Contains all of the functions related to audio codec setup.
  */

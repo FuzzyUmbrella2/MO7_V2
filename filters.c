@@ -30,7 +30,7 @@ void setupFilters()
 	}
 
 	input->index = 0;
-	input->gain = 0;
+	input->gain = 1;
 	input->gainOutputRight = 0;
 	input->gainOutputLeft = 0;
 
@@ -271,8 +271,10 @@ void IIR2(double* num, double* den, double* num2, double* den2, u8 nmr)
 
 void dBToFloat (s16 dB, u8 nmr)	//dB needs to be multiplied with 10
 {
+	if (dB > 120) {dB = 120;}
+	else if (dB < -120) {dB = -120;}
 	double gain = (double)pow(10,(dB/200.0));
-	printf("gain = %.2f\n", gain);
+	//printf("gain = %.2f\n", gain);
 	(filterOutput+nmr)->gain = gain;
 }
 

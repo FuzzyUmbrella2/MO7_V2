@@ -2,7 +2,8 @@
 #define __AUDIO_H_
 
 #include "xparameters.h"
-#include "defines.h"
+#include "xiicps.h"
+#include "xgpio.h"
 
 /* Redefine audio controller base address from xparameters.h */
 #define AUDIO_BASE				XPAR_AUDIO_AUDIO_CODEC_CTRL_0_BASEADDR
